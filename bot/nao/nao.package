@@ -1,0 +1,348 @@
+;;; *************************************************************************************
+;;;
+;;;  Copyright(c) 2013-2026 SubThought Corporation. All Rights Reserved.
+;;;
+;;;  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+;;;  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;;;  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+;;;
+;;;  IN NO EVENT SHALL THE AUTHOR(S) OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+;;;  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+;;;  ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE, ITS USE, OR OTHER
+;;;  DEALINGS IN THE SOFTWARE.
+;;;
+;;; *************************************************************************************
+;;;
+;;; nao.package — NAO Humanoid Protocol Knowledge
+;;;
+;;; Verified topics from naoqi_driver2 (ros-naoqi/naoqi_driver2).
+;;; Supports two transports:
+;;;   ros://   — via rosbridge + naoqi_driver2 (ROS 2 bridge)
+;;;   naoqi:// — via NAOqi HTTP API directly (nao-io provider)
+;;;
+;;; NAO (25 DOF):
+;;;   Head:    HeadYaw, HeadPitch
+;;;   LArm:   LShoulderPitch, LShoulderRoll, LElbowYaw, LElbowRoll, LWristYaw, LHand
+;;;   RArm:   RShoulderPitch, RShoulderRoll, RElbowYaw, RElbowRoll, RWristYaw, RHand
+;;;   LLeg:   LHipYawPitch, LHipRoll, LHipPitch, LKneePitch, LAnklePitch, LAnkleRoll
+;;;   RLeg:   RHipYawPitch, RHipRoll, RHipPitch, RKneePitch, RAnklePitch, RAnkleRoll
+;;;
+;;; Published topics (naoqi_driver2, prefix = /<robot_name>):
+;;;   /joint_states                       sensor_msgs/JointState
+;;;   /<prefix>/camera/front/image_raw    sensor_msgs/Image          (top camera)
+;;;   /<prefix>/camera/front/camera_info  sensor_msgs/CameraInfo
+;;;   /<prefix>/camera/bottom/image_raw   sensor_msgs/Image          (bottom camera)
+;;;   /<prefix>/camera/bottom/camera_info sensor_msgs/CameraInfo
+;;;   /<prefix>/imu_torso                 sensor_msgs/Imu
+;;;   /<prefix>/sonar/left                sensor_msgs/Range
+;;;   /<prefix>/sonar/right               sensor_msgs/Range
+;;;   /<prefix>/info                      naoqi_bridge_msgs/StringStamped
+;;;   /odom                               nav_msgs/Odometry
+;;;   /tf                                 tf2_msgs/TFMessage
+;;;
+;;; Subscribed topics:
+;;;   /cmd_vel                            geometry_msgs/Twist
+;;;   /joint_angles                       naoqi_bridge_msgs/JointAnglesWithSpeed
+;;;
+;;; Actions:
+;;;   listen                              naoqi_bridge_msgs/action/Listen
+;;;
+
+(package NAO {1 0 0}
+
+  memo "NAO adapter — verified topics from naoqi_driver2 for the SoftBank NAO humanoid."
+  requires {ROS nao-io}
+
+
+  ;;; §1  CONFIGURATION
+
+  (var ?nao-prefix "nao_robot")
+  (var ?nao-transport nil)
+
+
+  ;;; §2  CONNECTION
+
+  (function nao-open {string ?url idiom ?options}
+    (if (has ?url "naoqi://")
+      (do
+        (set ?nao-transport naoqi)
+        (open ?url ?options))
+    else
+      (do
+        (set ?nao-transport ros2)
+        (ros-open ?url ?options))))
+
+  (function nao-close {?handle}
+    (close ?handle)
+    closed)
+
+  (function nao-status {?handle}
+    (if (= ?nao-transport naoqi)
+      {:Status connected :Adapter nao :Transport naoqi}
+    else
+      (put (ros-status ?handle) :Adapter nao)))
+
+  (function nao-set-prefix {string ?prefix}
+    (set ?nao-prefix ?prefix))
+
+
+  ;;; §3  VISUAL — verified topics
+
+  (function nao-camera-top {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALVideoDevice :method getImageRemote :params {"camera_top"}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/camera/front/image_raw")
+                    :type "sensor_msgs/Image"})))
+
+  (function nao-camera-bottom {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALVideoDevice :method getImageRemote :params {"camera_bottom"}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/camera/bottom/image_raw")
+                    :type "sensor_msgs/Image"})))
+
+  (function nao-camera-info-top {?handle}
+    (ask ?handle {topic ($ "/" ?nao-prefix "/camera/front/camera_info")
+                  :type "sensor_msgs/CameraInfo"}))
+
+  (function nao-camera-info-bottom {?handle}
+    (ask ?handle {topic ($ "/" ?nao-prefix "/camera/bottom/camera_info")
+                  :type "sensor_msgs/CameraInfo"}))
+
+
+  ;;; §4  AUDITORY — speech recognition via action
+
+  (function nao-listen {?handle list ?expected string ?language}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALSpeechRecognition :method getLastWord :params {}})
+    else
+      (ask ?handle {action "listen"
+                    :type "naoqi_bridge_msgs/action/Listen"
+                    :expected ?expected :language ?language})))
+
+
+  ;;; §5  PROPRIOCEPTIVE — verified topics
+
+  (function nao-joint-states {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALMotion :method getAngles :params {"Body" true}})
+    else
+      (ask ?handle {topic "/joint_states" :type "sensor_msgs/JointState"})))
+
+  (function nao-imu {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALMemory :method getData :params {"Device/SubDeviceList/InertialSensor/AngleX/Sensor/Value"}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/imu_torso") :type "sensor_msgs/Imu"})))
+
+  (function nao-sonar-left {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALMemory :method getData :params {"Device/SubDeviceList/US/Left/Sensor/Value"}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/sonar/left") :type "sensor_msgs/Range"})))
+
+  (function nao-sonar-right {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALMemory :method getData :params {"Device/SubDeviceList/US/Right/Sensor/Value"}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/sonar/right") :type "sensor_msgs/Range"})))
+
+
+  ;;; §6  SPATIAL — verified topics
+
+  (function nao-odom {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALMotion :method getRobotPosition :params {true}})
+    else
+      (ask ?handle {topic "/odom" :type "nav_msgs/Odometry"})))
+
+
+  ;;; §7  HAPTIC — head touch, bumpers via NAOqi memory
+
+  (function nao-head-touch {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALMemory :method getData :params {"MiddleTactilTouched"}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/touch/head")
+                    :type "naoqi_bridge_msgs/HeadTouch"})))
+
+  (function nao-bumper-left {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALMemory :method getData :params {"LeftBumperPressed"}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/bumper/left") :type "std_msgs/Bool"})))
+
+  (function nao-bumper-right {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALMemory :method getData :params {"RightBumperPressed"}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/bumper/right") :type "std_msgs/Bool"})))
+
+
+  ;;; §8  LOCOMOTION — verified: /cmd_vel
+
+  (function nao-walk {?handle real ?linear real ?angular}
+    (if (= ?nao-transport naoqi)
+      (do (tell ?handle {module ALMotion :method moveToward :params {?linear 0.0 ?angular}})
+          {:Status moving})
+    else
+      (ros-cmd-vel ?handle ?linear ?angular)))
+
+  (function nao-stop {?handle}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALMotion :method stopMove :params {}})
+    else
+      (ros-stop ?handle)))
+
+  (function nao-stand {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALRobotPosture :method goToPosture :params {"Stand" 0.8}})
+    else
+      (tell ?handle {topic "/cmd_vel" :type "geometry_msgs/Twist"
+                     :linear {:x 0.0 :y 0.0 :z 0.0} :angular {:x 0.0 :y 0.0 :z 0.0}})))
+
+  (function nao-sit {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALRobotPosture :method goToPosture :params {"Sit" 0.8}})
+    else
+      (signal Failure :Text "NAO sit requires NAOqi transport")))
+
+  (function nao-crouch {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALRobotPosture :method goToPosture :params {"Crouch" 0.8}})
+    else
+      (signal Failure :Text "NAO crouch requires NAOqi transport")))
+
+  (function nao-rest {?handle}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALMotion :method rest :params {}})
+    else
+      (signal Failure :Text "NAO rest requires NAOqi transport"))
+    {:Status resting})
+
+
+  ;;; §9  JOINT CONTROL — verified: /joint_angles
+
+  (function nao-joint-angles {?handle list ?names list ?angles real ?speed}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALMotion :method angleInterpolationWithSpeed
+                     :params {?names ?angles ?speed}})
+    else
+      (tell ?handle {topic "/joint_angles"
+                     :type "naoqi_bridge_msgs/JointAnglesWithSpeed"
+                     :joint_names ?names :joint_angles ?angles
+                     :speed ?speed :relative 0}))
+    {:Status moving})
+
+
+  ;;; §10  MANIPULATION — hands
+
+  (function nao-hand-open {?handle literal ?hand}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALMotion :method openHand
+                     :params {($ ?hand "Hand")}})
+    else
+      (nao-joint-angles ?handle
+        {($ ?hand "Hand")} {1.0} 0.5))
+    {:Status released :Hand ?hand})
+
+  (function nao-hand-close {?handle literal ?hand}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALMotion :method closeHand
+                     :params {($ ?hand "Hand")}})
+    else
+      (nao-joint-angles ?handle
+        {($ ?hand "Hand")} {0.0} 0.5))
+    {:Status grasping :Hand ?hand})
+
+
+  ;;; §11  GAZE
+
+  (function nao-look {?handle real ?yaw real ?pitch real ?speed}
+    (nao-joint-angles ?handle {"HeadYaw" "HeadPitch"} {?yaw ?pitch} ?speed)
+    {:Status looking})
+
+
+  ;;; §12  COMMUNICATION — TTS, LEDs
+
+  (function nao-speak {?handle string ?text idiom ?options}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALTextToSpeech :method say :params {?text}})
+    else
+      (ros-speak ?handle ?text ?options))
+    {:Status spoken})
+
+  (function nao-led {?handle string ?group real ?r real ?g real ?b real ?duration}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALLeds :method fadeRGB
+                     :params {?group ?r ?g ?b ?duration}})
+    else
+      (signal Failure :Text "NAO LEDs require NAOqi transport"))
+    {:Status set})
+
+
+  ;;; §13  BEHAVIORS
+
+  (function nao-behavior {?handle string ?name}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALBehaviorManager :method runBehavior :params {?name}})
+    else
+      (signal Failure :Text "NAO behaviors require NAOqi transport")))
+
+
+  ;;; §14  SYSTEM
+
+  (function nao-e-stop {?handle}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALMotion :method killAll :params {}})
+    else
+      (ros-stop ?handle))
+    {:Status stopped})
+
+  (function nao-set-stiffness {?handle string ?joint real ?stiffness}
+    (if (= ?nao-transport naoqi)
+      (tell ?handle {module ALMotion :method setStiffnesses :params {?joint ?stiffness}})
+    else
+      (signal Failure :Text "NAO stiffness requires NAOqi transport"))
+    {:Status set})
+
+  (function nao-battery {?handle}
+    (if (= ?nao-transport naoqi)
+      (ask ?handle {module ALBattery :method getBatteryCharge :params {}})
+    else
+      (ask ?handle {topic ($ "/" ?nao-prefix "/battery")
+                    :type "sensor_msgs/BatteryState"})))
+
+
+  ;;; §15  DISPATCH
+
+  (function nao-dispatch {?handle literal ?action idiom ?params}
+    (case ?action
+      of walk           (nao-walk ?handle (ros-default (:LinearVelocity ?params) 0.3) (ros-default (:AngularVelocity ?params) 0.0))
+      of turn           (nao-walk ?handle 0.0 (ros-default (:Velocity ?params) 0.5))
+      of stop           (nao-stop ?handle)
+      of stand          (nao-stand ?handle)
+      of sit            (nao-sit ?handle)
+      of crouch         (nao-crouch ?handle)
+      of navigate       (ros-navigate ?handle (:Goal ?params))
+      of look           (nao-look ?handle (ros-default (:Yaw ?params) 0.0) (ros-default (:Pitch ?params) 0.0) (ros-default (:Speed ?params) 0.3))
+      of grasp          (nao-hand-close ?handle (ros-default (:Hand ?params) right))
+      of release        (nao-hand-open ?handle (ros-default (:Hand ?params) right))
+      of nod            (nao-behavior ?handle "nod")
+      of shake-head     (nao-behavior ?handle "shake_head")
+      of wave           (nao-behavior ?handle "wave")
+      of speak          (nao-speak ?handle (:Text ?params) ?params)
+      of emote          (nao-led ?handle "FaceLeds" (ros-default (:R ?params) 0.0) (ros-default (:G ?params) 1.0) (ros-default (:B ?params) 0.0) (ros-default (:Duration ?params) 2.0))
+      of set-led        (nao-led ?handle (:Group ?params) (:R ?params) (:G ?params) (:B ?params) (ros-default (:Duration ?params) 3.0))
+      of joint-move     (nao-joint-angles ?handle {(:JointName ?params)} {(:Position ?params)} (ros-default (:Speed ?params) 0.3))
+      of pose-move      (nao-behavior ?handle (:PoseName ?params))
+      of set-stiffness  (nao-set-stiffness ?handle (ros-default (:JointName ?params) "Body") (ros-default (:Stiffness ?params) 1.0))
+      of capture-photo  (nao-camera-top ?handle)
+      of e-stop         (nao-e-stop ?handle)
+      else              (if (= ?nao-transport ros2)
+                          (ros-dispatch ?handle ?action ?params)
+                        else
+                          (signal Failure :Text ($ "NAO: unknown action" ?action)))))
+
+)
