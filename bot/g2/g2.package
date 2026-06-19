@@ -1,0 +1,235 @@
+;;; *************************************************************************************
+;;;
+;;;  Copyright(c) 2013-2026 SubThought Corporation. All Rights Reserved.
+;;;
+;;;  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+;;;  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;;;  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+;;;
+;;;  IN NO EVENT SHALL THE AUTHOR(S) OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+;;;  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+;;;  ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE, ITS USE, OR OTHER
+;;;  DEALINGS IN THE SOFTWARE.
+;;;
+;;; *************************************************************************************
+;;;
+;;; g2.package — Unitree G1/G2 Humanoid Protocol Knowledge
+;;;
+;;; Verified topics from unitree_ros2 and g1pilot packages.
+;;; All tell/ask calls go through ros-io.dll via ros-open handles.
+;;;
+;;; The Unitree G1 EDU uses CycloneDDS natively. Topics are accessible
+;;; via unitree_ros2 or through rosbridge_suite if configured.
+;;;
+;;; G1 (23–29 DOF depending on variant):
+;;;   LLeg:   LeftHipPitch, LeftHipRoll, LeftHipYaw, LeftKnee, LeftAnklePitch, LeftAnkleB
+;;;   RLeg:   RightHipPitch, RightHipRoll, RightHipYaw, RightKnee, RightAnklePitch, RightAnkleB
+;;;   Waist:  WaistYaw (29 DOF variant only)
+;;;   LArm:   LeftShoulderPitch, LeftShoulderRoll, LeftShoulderYaw, LeftElbow,
+;;;           LeftWristRoll, LeftWristPitch, LeftWristYaw (29 DOF variant only)
+;;;   RArm:   RightShoulderPitch, RightShoulderRoll, RightShoulderYaw, RightElbow,
+;;;           RightWristRoll, RightWristPitch, RightWristYaw (29 DOF variant only)
+;;;
+;;; Verified DDS topics (from unitree_ros2):
+;;;   /lowstate                           unitree_hg::msg::LowState       (motor pos/vel/effort + IMU)
+;;;   /lowcmd                             unitree_hg::msg::LowCmd         (motor commands)
+;;;   /sportmodestate                     unitree_go::msg::SportModeState (high-level state)
+;;;   /odommodestate                      unitree_go::msg::SportModeState (odometry mode)
+;;;   /dex3/left/cmd                      unitree_hg::msg::HandCmd        (left DEX3 hand)
+;;;   /dex3/left/state                    unitree_hg::msg::HandState
+;;;   /dex3/right/cmd                     unitree_hg::msg::HandCmd        (right DEX3 hand)
+;;;   /dex3/right/state                   unitree_hg::msg::HandState
+;;;   /arm_sdk                                                            (arm control)
+;;;   /loco_sdk                                                           (locomotion)
+;;;   /gnss                                                               (GPS)
+;;;   /frontvideostream                                                   (front camera)
+;;;   /audiosender                                                        (audio)
+;;;
+;;; Via g1pilot ROS 2 package (standard topics):
+;;;   /joint_states                       sensor_msgs/JointState
+;;;   /odom                               nav_msgs/Odometry
+;;;
+;;; Sport mode values:
+;;;   0=idle  1=balanceStand  2=pose  3=locomotion  5=lieDown
+;;;   6=jointLock  7=damping  8=recoveryStand  10=sit
+;;;
+
+(package G2 {1 0 0}
+
+  memo "G2 adapter — verified topics from unitree_ros2 for the Unitree G1/G2 humanoid."
+  requires {ROS}
+
+
+  ;;; §1  CONNECTION
+
+  (function g2-open {string ?url idiom ?options}
+    (ros-open ?url ?options))
+
+  (function g2-close {?handle}
+    (ros-close ?handle))
+
+  (function g2-status {?handle}
+    (put (ros-status ?handle) :Adapter g2))
+
+
+  ;;; §2  LOW-LEVEL STATE (Unitree native DDS)
+  ;;;
+  ;;; These access Unitree's native topics which include per-motor
+  ;;; position, velocity, effort, temperature, and IMU data.
+
+  (function g2-lowstate {?handle}
+    (ask ?handle {topic "/lowstate" :type "unitree_hg/msg/LowState"}))
+
+  (function g2-sportmode-state {?handle}
+    (ask ?handle {topic "/sportmodestate" :type "unitree_go/msg/SportModeState"}))
+
+  (function g2-odom-state {?handle}
+    (ask ?handle {topic "/odommodestate" :type "unitree_go/msg/SportModeState"}))
+
+
+  ;;; §3  STANDARD ROS 2 STATE (via g1pilot bridge)
+
+  (function g2-joint-states {?handle}
+    (ask ?handle {topic "/joint_states" :type "sensor_msgs/JointState"}))
+
+  (function g2-odom {?handle}
+    (ask ?handle {topic "/odom" :type "nav_msgs/Odometry"}))
+
+  (function g2-imu {?handle}
+    (ros-imu-read ?handle "/imu"))
+
+
+  ;;; §4  VISUAL — front camera, LIDAR (Livox Mid-360)
+
+  (function g2-front-camera {?handle}
+    (ask ?handle {topic "/frontvideostream" :type "sensor_msgs/Image"}))
+
+  (function g2-depth {?handle}
+    (ask ?handle {topic "/camera/depth/image_raw" :type "sensor_msgs/Image"}))
+
+  (function g2-lidar {?handle}
+    (ask ?handle {topic "/livox/lidar" :type "sensor_msgs/PointCloud2"}))
+
+
+  ;;; §5  AUDITORY
+
+  (function g2-audio {?handle}
+    (ask ?handle {topic "/audiosender" :type "audio_msgs/Audio"}))
+
+
+  ;;; §6  HAPTIC — DEX3 hands (verified topics)
+
+  (function g2-hand-left-state {?handle}
+    (ask ?handle {topic "/dex3/left/state" :type "unitree_hg/msg/HandState"}))
+
+  (function g2-hand-right-state {?handle}
+    (ask ?handle {topic "/dex3/right/state" :type "unitree_hg/msg/HandState"}))
+
+  (function g2-grasp {?handle literal ?hand real ?force}
+    (tell ?handle {topic ($ "/dex3/" ?hand "/cmd")
+                   :type "unitree_hg/msg/HandCmd"
+                   :mode 1 :force ?force})
+    {:Status grasping :Hand ?hand})
+
+  (function g2-release {?handle literal ?hand}
+    (tell ?handle {topic ($ "/dex3/" ?hand "/cmd")
+                   :type "unitree_hg/msg/HandCmd"
+                   :mode 0})
+    {:Status released :Hand ?hand})
+
+
+  ;;; §7  SPATIAL — GPS
+
+  (function g2-gnss {?handle}
+    (ask ?handle {topic "/gnss" :type "sensor_msgs/NavSatFix"}))
+
+
+  ;;; §8  LOW-LEVEL MOTOR CONTROL (verified: /lowcmd)
+
+  (function g2-lowcmd {?handle idiom ?cmd}
+    (tell ?handle {topic "/lowcmd" :type "unitree_hg/msg/LowCmd"
+                   :motor_cmd (:MotorCmd ?cmd)
+                   :mode_pr (:ModePR ?cmd)}))
+
+  (function g2-joint-move {?handle integer ?motorIndex real ?position real ?kp real ?kd}
+    (tell ?handle {topic "/lowcmd" :type "unitree_hg/msg/LowCmd"
+                   :motor_index ?motorIndex
+                   :mode 1
+                   :q ?position
+                   :kp ?kp
+                   :kd ?kd})
+    {:Status moving})
+
+
+  ;;; §9  HIGH-LEVEL LOCOMOTION (via loco_sdk / cmd_vel)
+
+  (function g2-walk {?handle real ?linear real ?angular}
+    (ros-cmd-vel ?handle ?linear ?angular))
+
+  (function g2-stand {?handle}
+    (tell ?handle {topic "/loco_sdk" :mode 1})
+    {:Status standing})
+
+  (function g2-sit {?handle}
+    (tell ?handle {topic "/loco_sdk" :mode 10})
+    {:Status sitting})
+
+  (function g2-recovery-stand {?handle}
+    (tell ?handle {topic "/loco_sdk" :mode 8})
+    {:Status recovering})
+
+  (function g2-damping {?handle}
+    (tell ?handle {topic "/loco_sdk" :mode 7})
+    {:Status damping})
+
+
+  ;;; §10  ARM CONTROL (via arm_sdk)
+
+  (function g2-arm-move {?handle idiom ?target}
+    (tell ?handle {topic "/arm_sdk" :target ?target})
+    {:Status moving})
+
+
+  ;;; §11  GAZE / SPEECH
+
+  (function g2-look {?handle real ?yaw real ?pitch}
+    (g2-joint-move ?handle 12 ?yaw 50.0 1.0)
+    {:Status looking})
+
+  (function g2-speak {?handle string ?text idiom ?options}
+    (ros-speak ?handle ?text ?options))
+
+
+  ;;; §12  SYSTEM
+
+  (function g2-e-stop {?handle}
+    (g2-damping ?handle)
+    {:Status stopped :Severity critical})
+
+  (function g2-set-mode {?handle integer ?mode}
+    (tell ?handle {topic "/loco_sdk" :mode ?mode})
+    {:Status ?mode})
+
+
+  ;;; §13  DISPATCH
+
+  (function g2-dispatch {?handle literal ?action idiom ?params}
+    (case ?action
+      of walk           (g2-walk ?handle (ros-default (:LinearVelocity ?params) 0.3) (ros-default (:AngularVelocity ?params) 0.0))
+      of turn           (ros-cmd-vel ?handle 0.0 (ros-default (:Velocity ?params) 0.5))
+      of stop           (ros-stop ?handle)
+      of stand          (g2-stand ?handle)
+      of sit            (g2-sit ?handle)
+      of navigate       (ros-navigate ?handle (:Goal ?params))
+      of look           (g2-look ?handle (ros-default (:Yaw ?params) 0.0) (ros-default (:Pitch ?params) 0.0))
+      of reach          (g2-arm-move ?handle (:Target ?params))
+      of grasp          (g2-grasp ?handle (ros-default (:Hand ?params) right) (ros-default (:Force ?params) 5.0))
+      of release        (g2-release ?handle (ros-default (:Hand ?params) right))
+      of speak          (g2-speak ?handle (:Text ?params) ?params)
+      of joint-move     (g2-joint-move ?handle (:MotorIndex ?params) (:Position ?params) (ros-default (:Kp ?params) 50.0) (ros-default (:Kd ?params) 1.0))
+      of capture-photo  (g2-front-camera ?handle)
+      of e-stop         (g2-e-stop ?handle)
+      of set-mode       (g2-set-mode ?handle (:Mode ?params))
+      else              (ros-dispatch ?handle ?action ?params)))
+
+)
