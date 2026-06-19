@@ -1,0 +1,63 @@
+;;; *************************************************************************************
+;;;
+;;;  Copyright(c) 2013-2026 SubThought Corporation. All Rights Reserved.
+;;;
+;;;  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+;;;  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;;;  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+;;;
+;;;  IN NO EVENT SHALL THE AUTHOR(S) OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+;;;  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+;;;  ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE, ITS USE, OR OTHER
+;;;  DEALINGS IN THE SOFTWARE.
+;;;
+;;; *************************************************************************************
+;;;
+;;; nao-io.package — NAOqi data adapter for Premise I/O subsystem.
+;;;
+;;; Bridges Premise tell/ask to NAO robots via the NAOqi HTTP API.
+;;; Provides direct access to all NAOqi modules through the standard
+;;; open/close/tell/ask intrinsics.
+;;;
+;;; Usage:
+;;;   (require nao-io from "pkg/nao-io/nao-io.package")
+;;;   (open "naoqi://nao-03:9559")
+;;;   (ask  Nao-1 {module ALMotion :method getAngles :params {"HeadYaw" true}})
+;;;   (tell Nao-1 {module ALMotion :method moveToward :params {0.5 0.0 0.0}})
+;;;   (tell Nao-1 {module ALTextToSpeech :method say :params {"hello"}})
+;;;   (ask  Nao-1 {module ALMemory :method getData :params {"BatteryChargeChanged"}})
+;;;   (ask  Nao-1 {module ALRobotPosture :method getPostureFamily :params {}})
+;;;   (tell Nao-1 {module ALLeds :method fadeRGB :params {"FaceLeds" 255 1.0}})
+;;;   (close Nao-1)
+;;;
+;;; NAOqi modules accessible:
+;;;   ALMotion            — joint control, walking, stiffness, cartesian
+;;;   ALTextToSpeech      — speech synthesis
+;;;   ALAudioDevice       — microphone capture, sound level
+;;;   ALVideoDevice       — camera subscriptions, image capture
+;;;   ALSoundLocalization — sound source direction
+;;;   ALFaceDetection     — face detection
+;;;   ALMemory            — shared memory, events, sensor values
+;;;   ALLeds              — LED color and fade
+;;;   ALBehaviorManager   — named behaviors (run, stop, list)
+;;;   ALRobotPosture      — predefined postures (Stand, Sit, Crouch)
+;;;   ALTabletService     — tablet display (NAO v6)
+;;;   ALSonar             — ultrasonic sonar
+;;;   ALBattery           — battery state
+;;;   ALSystem            — robot name, version, shutdown
+;;;
+
+(package nao-io {1 0 0}
+    "NAOqi data adapter for Premise I/O via HTTP API."
+    (provider
+        author  "SubThought Corporation"
+        memo    "NAOqi adapter for direct access to NAO robot modules."
+        path    "./pkg/nao-io/"
+        adapter "NaoIO"
+        library "nao-io.dll"
+        scheme  "naoqi://")
+    (external function connect {?url ?options}
+        :Library "nao-io.dll" :Function "TryOpen"
+        :Params  {url ?url idiom ?options}
+        :Returns variant
+        "Opens an HTTP connection to NAOqi on a NAO robot."))
