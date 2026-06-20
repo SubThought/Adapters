@@ -23,7 +23,7 @@
 (package ROS {1 0 0}
   "ROS 2 protocol — shared functions for all ROS 2 robots."
 
-  (require ros-io from "pkg/ros-io/ros-io.package")
+  (require ros-io from "./pkg/ros-io/ros-io.package")
 
 
   ;;; §1  HELPERS
