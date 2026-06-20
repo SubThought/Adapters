@@ -19,13 +19,11 @@
 ;;; go through the ros-io provider (RosIO.dll) which speaks rosbridge
 ;;; WebSocket.  Connection handles are obtained via (open "ros://host:9090").
 ;;;
-;;; All robot-specific adapter packages build on this package.
-;;;
 
 (package ROS {1 0 0}
+  "ROS 2 protocol — shared functions for all ROS 2 robots."
 
-  memo "ROS 2 protocol — shared functions for all ROS 2 robots."
-  requires {ros-io}
+  (require ros-io from "pkg/ros-io/ros-io.package")
 
 
   ;;; §1  HELPERS
@@ -35,9 +33,6 @@
 
 
   ;;; §2  CONNECTION
-  ;;;
-  ;;; Opens through the ros-io provider.  The scheme "ros://" routes
-  ;;; to RosIO.TryOpen which connects via WebSocket to rosbridge.
 
   (function ros-open {string ?url idiom ?options}
     (var ?ros-url (if (has ?url "ros://") ?url
@@ -56,10 +51,7 @@
     {:Status (if (nil-p ?s) disconnected else connected) :Adapter ros2})
 
 
-  ;;; §3  VISUAL — cameras, depth, LIDAR
-  ;;;
-  ;;; Each ask goes through RosIO.TryAsk which subscribes to the
-  ;;; rosbridge topic and returns the next message as a Premise idiom.
+  ;;; §3  VISUAL
 
   (function ros-camera-read {?handle string ?topic}
     (ask ?handle {topic ?topic :type "sensor_msgs/Image"}))
@@ -80,7 +72,7 @@
     (ask ?handle {topic ?topic :type "audio_msgs/Audio"}))
 
 
-  ;;; §5  PROPRIOCEPTIVE — joints, IMU, battery
+  ;;; §5  PROPRIOCEPTIVE
 
   (function ros-joint-states {?handle}
     (ask ?handle {topic "/joint_states" :type "sensor_msgs/JointState"}))
@@ -92,7 +84,7 @@
     (ask ?handle {topic (ros-default ?topic "/battery") :type "sensor_msgs/BatteryState"}))
 
 
-  ;;; §6  HAPTIC — force/torque, contact
+  ;;; §6  HAPTIC
 
   (function ros-ft-read {?handle string ?topic}
     (ask ?handle {topic ?topic :type "geometry_msgs/WrenchStamped"}))
@@ -101,7 +93,7 @@
     (ask ?handle {topic ?topic :type "std_msgs/Bool"}))
 
 
-  ;;; §7  SPATIAL — odometry, pose, TF, map
+  ;;; §7  SPATIAL
 
   (function ros-odom-read {?handle}
     (ask ?handle {topic "/odom" :type "nav_msgs/Odometry"}))
@@ -116,11 +108,7 @@
     (ask ?handle {topic "/map" :type "nav_msgs/OccupancyGrid"}))
 
 
-  ;;; §8  LOCOMOTION — cmd_vel, navigation
-  ;;;
-  ;;; tell goes through RosIO.TryTell which publishes to the topic.
-  ;;; ask goes through RosIO.TryAsk which sends an action goal and
-  ;;; waits for the result.
+  ;;; §8  LOCOMOTION
 
   (function ros-cmd-vel {?handle real ?linear real ?angular}
     (tell ?handle {topic "/cmd_vel" :type "geometry_msgs/Twist"
@@ -141,7 +129,7 @@
     {:Status stopped})
 
 
-  ;;; §9  MANIPULATION — joint trajectory
+  ;;; §9  MANIPULATION
 
   (function ros-joint-move {?handle string ?joint real ?position real ?velocity}
     (ask ?handle {action "/follow_joint_trajectory"
@@ -189,3 +177,5 @@
       else              (signal Failure :Text ($ "ROS2: unknown action" ?action))))
 
 )
+
+;;; -------- end of file -------
