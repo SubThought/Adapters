@@ -49,9 +49,9 @@
 ;;;
 
 (package NAO {1 0 0}
-
-  memo "NAO adapter — verified topics from naoqi_driver2 for the SoftBank NAO humanoid."
-  requires {ROS nao-io}
+  "NAO adapter — verified topics from naoqi_driver2 for the SoftBank NAO humanoid."
+  (require ROS from "./pkg/ros/ros.package")
+  (require nao-io from "./pkg/nao-io/nao-io.package")
 
 
   ;;; §1  CONFIGURATION
@@ -346,3 +346,5 @@
                           (signal Failure :Text ($ "NAO: unknown action" ?action)))))
 
 )
+
+;;; -------- end of file -------
